@@ -1,14 +1,12 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>AR Dish (Marker Based)</title>
 
   <style>
-    html,
-    body {
+    html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
@@ -18,12 +16,10 @@
 
     #overlay {
       position: fixed;
-      left: 0;
-      right: 0;
-      top: 0;
+      left: 0; right: 0; top: 0;
       padding: 12px 14px;
       color: #fff;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0,0,0,0.55);
       z-index: 10;
       font-size: 14px;
       line-height: 1.35;
@@ -31,12 +27,10 @@
 
     #hint {
       position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      left: 0; right: 0; bottom: 0;
       padding: 14px;
       color: #fff;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0,0,0,0.55);
       z-index: 10;
       font-size: 14px;
     }
@@ -45,55 +39,124 @@
       display: inline-block;
       padding: 4px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(255,255,255,0.14);
       margin-left: 8px;
     }
 
-    #status {
-      opacity: 0.9;
+    #status { opacity: 0.95; }
+
+    /* Debug overlay (hidden unless an error occurs) */
+    #debug {
+      position: fixed;
+      left: 10px; right: 10px;
+      top: 68px;
+      z-index: 9999;
+      color: #fff;
+      background: rgba(255, 0, 0, 0.28);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      display: none;
+      max-height: 40vh;
+      overflow: auto;
+    }
+
+    /* Fullscreen tap-catcher (so user tap always triggers start) */
+    #tapLayer {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      background: transparent;
     }
   </style>
 
-  <!-- MindAR (three.js version) -->
+  <!-- Load order matters -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 
 <body>
   <div id="overlay">
     <b>Marker AR Dish</b><span class="chip">Android</span><br />
-    <span id="status">Allow camera → point at the printed marker.</span>
+    <span id="status">Tap the screen to start AR</span>
   </div>
+
+  <div id="debug"></div>
+
   <div id="hint">
     Tip: Use a high-detail printed image marker (not QR). Keep it well-lit and steady.
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <!-- Ensures we always get a click/tap to start camera -->
+  <div id="tapLayer" aria-label="Tap to start AR"></div>
 
   <script>
     const statusEl = document.getElementById("status");
+    const debugEl  = document.getElementById("debug");
+    const tapLayer = document.getElementById("tapLayer");
+
+    function showErr(e) {
+      console.error(e);
+      debugEl.style.display = "block";
+      const msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+      debugEl.textContent = msg;
+    }
+
+    window.addEventListener("error", (e) => showErr(e.error || e.message));
+    window.addEventListener("unhandledrejection", (e) => showErr(e.reason));
+
+    function withTimeout(promise, ms, timeoutMessage) {
+      let t;
+      const timeout = new Promise((_, reject) => {
+        t = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+      });
+      return Promise.race([
+        promise.finally(() => clearTimeout(t)),
+        timeout
+      ]);
+    }
 
     async function startAR() {
+      // basic sanity
+      if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        statusEl.textContent = "HTTPS required. Open via GitHub Pages (https://...)";
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusEl.textContent = "Camera API not available in this browser.";
+        return;
+      }
+
       statusEl.textContent = "Starting camera…";
 
+      // IMPORTANT: pass explicit constraints for better Android compatibility
       const mindarThree = new window.MINDAR.IMAGE.MindARThree({
         container: document.body,
         imageTargetSrc: "targets/dish-target.mind",
         uiLoading: "no",
         uiScanning: "no",
         uiError: "no",
+        constraints: {
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width:  { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        }
       });
 
       const { renderer, scene, camera } = mindarThree;
 
       // Lights
       scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.0));
-      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.85);
       dir.position.set(0, 2, 1);
       scene.add(dir);
 
-      // Anchor
+      // Anchor: target index 0
       const anchor = mindarThree.addAnchor(0);
 
       // Load model
@@ -102,39 +165,47 @@
         "models/biryani.glb",
         (gltf) => {
           const model = gltf.scene;
+
+          // Tune these for your model
           model.scale.set(0.3, 0.3, 0.3);
+          model.position.set(0, 0, 0);
+          model.rotation.set(0, 0, 0);
+
           anchor.group.add(model);
           statusEl.textContent = "Point camera at marker";
         },
         undefined,
-        () => statusEl.textContent = "Failed to load model"
+        (err) => {
+          statusEl.textContent = "Failed to load model (check path/case).";
+          showErr(err);
+        }
       );
 
-      anchor.onTargetFound = () => {
-        statusEl.textContent = "Marker found ✅";
-      };
+      anchor.onTargetFound = () => { statusEl.textContent = "Marker found ✅"; };
+      anchor.onTargetLost  = () => { statusEl.textContent = "Marker lost — point back at marker."; };
 
-      anchor.onTargetLost = () => {
-        statusEl.textContent = "Marker lost";
-      };
+      try {
+        // If start hangs, fail fast and show why
+        await withTimeout(mindarThree.start(), 12000, "MindAR start timed out. Try Chrome (not in-app browser) and recheck camera permission.");
+      } catch (e) {
+        statusEl.textContent = "Camera failed to start.";
+        showErr(e);
+        return;
+      }
 
-      await mindarThree.start();
+      // Hide tap layer once started
+      tapLayer.style.display = "none";
 
       renderer.setAnimationLoop(() => {
         renderer.render(scene, camera);
       });
     }
 
-    // REQUIRED user interaction
-    document.body.addEventListener("click", () => {
-      if (!window.__arStarted) {
-        window.__arStarted = true;
-        startAR();
-      }
-    });
-
-    statusEl.textContent = "Tap screen to start AR";
+    tapLayer.addEventListener("click", () => {
+      if (window.__arStarted) return;
+      window.__arStarted = true;
+      startAR();
+    }, { passive: true });
   </script>
 </body>
-
 </html>
