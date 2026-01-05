@@ -1,147 +1,140 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>AR Dish (Marker Based)</title>
 
-    <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, Arial; }
-      #overlay {
-        position: fixed; left: 0; right: 0; top: 0;
-        padding: 12px 14px;
-        color: #fff;
-        background: rgba(0,0,0,0.45);
-        z-index: 10;
-        font-size: 14px;
-        line-height: 1.35;
-      }
-      #hint {
-        position: fixed; left: 0; right: 0; bottom: 0;
-        padding: 14px;
-        color: #fff;
-        background: rgba(0,0,0,0.45);
-        z-index: 10;
-        font-size: 14px;
-      }
-      .chip {
-        display: inline-block; padding: 4px 10px; border-radius: 999px;
-        background: rgba(255,255,255,0.12); margin-left: 8px;
-      }
-      #status { opacity: 0.9; }
-    </style>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AR Dish (Marker Based)</title>
 
-    <!-- MindAR (three.js version) -->
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
-  </head>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, Arial;
+    }
 
-  <body>
-    <div id="overlay">
-      <b>Marker AR Dish</b><span class="chip">Android</span><br/>
-      <span id="status">Allow camera → point at the printed marker.</span>
-    </div>
-    <div id="hint">
-      Tip: Use a high-detail printed image marker (not QR). Keep it well-lit and steady.
-    </div>
+    #overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      padding: 12px 14px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 10;
+      font-size: 14px;
+      line-height: 1.35;
+    }
 
-    <script>
-      const statusEl = document.getElementById("status");
+    #hint {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 14px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 10;
+      font-size: 14px;
+    }
 
-      // Quick environment checks
-      if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        statusEl.textContent = "HTTPS required. Open via GitHub Pages (https://...).";
-      }
+    .chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      margin-left: 8px;
+    }
 
-      const start = async () => {
-        // MindAR setup
-        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-          container: document.body,
-          imageTargetSrc: "targets/dish-target.mind", // compiled target
-          uiLoading: "no",
-          uiScanning: "no",
-          uiError: "no",
-        });
+    #status {
+      opacity: 0.9;
+    }
+  </style>
 
-        const { renderer, scene, camera } = mindarThree;
+  <!-- MindAR (three.js version) -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+</head>
 
-        // Lights (basic, stable)
-        const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
-        scene.add(hemi);
+<body>
+  <div id="overlay">
+    <b>Marker AR Dish</b><span class="chip">Android</span><br />
+    <span id="status">Allow camera → point at the printed marker.</span>
+  </div>
+  <div id="hint">
+    Tip: Use a high-detail printed image marker (not QR). Keep it well-lit and steady.
+  </div>
 
-        const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-        dir.position.set(0, 2, 1);
-        scene.add(dir);
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 
-        // Anchor for target index 0 (single marker)
-        const anchor = mindarThree.addAnchor(0);
+  <script>
+    const statusEl = document.getElementById("status");
 
-        // Load GLB model
-        statusEl.textContent = "Loading 3D model...";
-        const loader = new THREE.GLTFLoader();
-        loader.load(
-          "models/biryani.glb",
-          (gltf) => {
-            const model = gltf.scene;
+    async function startAR() {
+      statusEl.textContent = "Starting camera…";
 
-            // IMPORTANT: scale to fit the marker (tune this)
-            // Start with small scale, then adjust.
-            model.scale.set(0.3, 0.3, 0.3);
+      const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+        container: document.body,
+        imageTargetSrc: "targets/dish-target.mind",
+        uiLoading: "no",
+        uiScanning: "no",
+        uiError: "no",
+      });
 
-            // Position it slightly above the marker plane if needed
-            model.position.set(0, 0, 0);
+      const { renderer, scene, camera } = mindarThree;
 
-            // Optional: rotate to face camera correctly
-            model.rotation.set(0, 0, 0);
+      // Lights
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.0));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(0, 2, 1);
+      scene.add(dir);
 
-            anchor.group.add(model);
-            statusEl.textContent = "Point camera at the marker image.";
-          },
-          undefined,
-          (err) => {
-            console.error(err);
-            statusEl.textContent = "Failed to load GLB. Check path / file name.";
-          }
-        );
+      // Anchor
+      const anchor = mindarThree.addAnchor(0);
 
-        // Track found/lost events for UX
-        anchor.onTargetFound = () => {
-          statusEl.textContent = "Marker found ✅";
-        };
-        anchor.onTargetLost = () => {
-          statusEl.textContent = "Marker lost — point back at marker.";
-        };
+      // Load model
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        "models/biryani.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.scale.set(0.3, 0.3, 0.3);
+          anchor.group.add(model);
+          statusEl.textContent = "Point camera at marker";
+        },
+        undefined,
+        () => statusEl.textContent = "Failed to load model"
+      );
 
-        await mindarThree.start();
-
-        renderer.setAnimationLoop(() => {
-          renderer.render(scene, camera);
-        });
+      anchor.onTargetFound = () => {
+        statusEl.textContent = "Marker found ✅";
       };
 
-      // Required loaders from three.js
-      // MindAR bundle includes THREE, but GLTFLoader must be injected.
-      // We'll load three.js helpers dynamically.
-      (async () => {
-        // Load THREE + GLTFLoader
-        const threeScript = document.createElement("script");
-        threeScript.src = "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js";
-        document.head.appendChild(threeScript);
-        await new Promise(r => threeScript.onload = r);
+      anchor.onTargetLost = () => {
+        statusEl.textContent = "Marker lost";
+      };
 
-        const gltfScript = document.createElement("script");
-        gltfScript.src = "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js";
-        document.head.appendChild(gltfScript);
-        await new Promise(r => gltfScript.onload = r);
+      await mindarThree.start();
 
-        // Start AR
-        start().catch((e) => {
-          console.error(e);
-          statusEl.textContent = "Camera start failed. Check permissions / HTTPS.";
-        });
-      })();
-    </script>
-  </body>
+      renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+      });
+    }
+
+    // REQUIRED user interaction
+    document.body.addEventListener("click", () => {
+      if (!window.__arStarted) {
+        window.__arStarted = true;
+        startAR();
+      }
+    });
+
+    statusEl.textContent = "Tap screen to start AR";
+  </script>
+</body>
+
 </html>
